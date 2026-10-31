@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#2563eb"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+  </defs>
+  <!-- Background with rounded corners -->
+  <rect width="512" height="512" rx="104" fill="url(#bgGrad)"/>
+  
+  <!-- Factory Roof / Silhouette in safe zone -->
+  <g transform="translate(64, 76)">
+    <!-- Chimneys and steam -->
+    <path d="M70,120 L70,70 A10,10 0 0,1 80,60 L110,60 A10,10 0 0,1 120,70 L120,120 Z" fill="#475569"/>
+    <path d="M140,120 L140,40 A10,10 0 0,1 150,30 L180,30 A10,10 0 0,1 190,40 L190,120 Z" fill="#64748b"/>
+    
+    <!-- Factory sawtooth building -->
+    <path d="M40,280 L40,140 L130,200 L130,140 L220,200 L220,140 L310,200 L340,200 L340,280 Z" fill="url(#accentGrad)"/>
+    
+    <!-- Windows grid -->
+    <rect x="70" y="220" width="36" height="40" rx="4" fill="#ffffff" opacity="0.9"/>
+    <rect x="150" y="220" width="36" height="40" rx="4" fill="#ffffff" opacity="0.9"/>
+    <rect x="230" y="220" width="36" height="40" rx="4" fill="#ffffff" opacity="0.9"/>
+    
+    <!-- Large Gear in center foreground -->
+    <g transform="translate(192, 230)">
+      <circle cx="0" cy="0" r="76" fill="#0f172a" stroke="url(#goldGrad)" stroke-width="14"/>
+      <circle cx="0" cy="0" r="32" fill="url(#goldGrad)"/>
+      <path d="M-12,-88 L12,-88 L10,-72 L-10,-72 Z
+               M-12,88 L12,88 L10,72 L-10,72 Z
+               M-88,-12 L-88,12 L-72,10 L-72,-10 Z
+               M88,-12 L88,12 L72,10 L72,-10 Z
+               M-62,-62 L-45,-79 L-34,-68 L-51,-51 Z
+               M62,62 L45,79 L34,68 L51,51 Z
+               M-62,62 L-79,45 L-68,34 L-51,51 Z
+               M62,-62 L79,-45 L68,-34 L51,-51 Z" fill="url(#goldGrad)"/>
+    </g>
+  </g>
+  <!-- App text bottom -->
+  <text x="256" y="445" font-family="system-ui, -apple-system, sans-serif" font-size="44" font-weight="900" fill="#f8fafc" text-anchor="middle" letter-spacing="4">FABRIL ERP</text>
+</svg>

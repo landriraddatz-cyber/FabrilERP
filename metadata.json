@@ -1,0 +1,6 @@
+{
+  "name": "FabrilERP - Gestão de Pequena Fábrica",
+  "description": "ERP mobile-first e PWA offline para pequenas fábricas com gestão de produção, vendas, estoque, compras, financeiro e inteligência de mercado.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
