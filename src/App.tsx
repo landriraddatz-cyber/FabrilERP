@@ -16,7 +16,7 @@ import { RelatoriosView } from './views/RelatoriosView';
 import { ConfiguracoesView } from './views/ConfiguracoesView';
 
 import { db } from './db';
-import { seedSampleData } from './db/seed';
+import { seedSampleData, ensureDefaultPlanoContas } from './db/seed';
 import { DadosEmpresa } from './types';
 import { formatCurrency } from './utils/formatters';
 import { ArrowLeft } from 'lucide-react';
@@ -53,6 +53,7 @@ export default function App() {
   useEffect(() => {
     const init = async () => {
       await seedSampleData(false);
+      await ensureDefaultPlanoContas();
       const emp = await db.empresaConfig.get('empresa_padrao');
       if (emp) setEmpresa(emp);
 

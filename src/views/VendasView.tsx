@@ -13,10 +13,13 @@ import {
   ChevronRight,
   PackageCheck,
   Printer,
+  Trash2,
 } from 'lucide-react';
 import { db, faturarPedido } from '../db';
 import { formatCurrency, formatDateBr, todayIsoDate, addDaysIso } from '../utils/formatters';
 import { Venda, ItemVenda, Produto, Pessoa, FormaPagamento, DadosEmpresa } from '../types';
+import { QuantityInput } from '../components/common/QuantityInput';
+import { MoneyInput } from '../components/common/MoneyInput';
 
 export const VendasView: React.FC = () => {
   const [vendas, setVendas] = useState<Venda[]>([]);
@@ -430,11 +433,11 @@ export const VendasView: React.FC = () => {
                   {v.itens.map((it, idx) => {
                     const prod = produtos.find((p) => p.id === it.produtoId);
                     return (
-                      <div key={idx} className="flex justify-between items-center text-[11px]">
-                        <span>
+                      <div key={idx} className="flex justify-between items-center text-[11px] gap-2">
+                        <span className="truncate flex-1 min-w-0">
                           {it.quantidade}x {prod?.nome || 'Produto'}
                         </span>
-                        <span className="text-slate-500">
+                        <span className="text-slate-500 shrink-0">
                           {it.origem === 'producao' ? '🛠️ Produção' : '📦 Estoque'}
                         </span>
                       </div>
@@ -560,60 +563,68 @@ export const VendasView: React.FC = () => {
                 {formItens.map((it, idx) => (
                   <div
                     key={it.id}
-                    className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2"
+                    className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2.5 min-w-0"
                   >
-                    <div className="flex gap-2">
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                          Item / Descrição do Produto
+                        </label>
+                        {formItens.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(idx)}
+                            className="text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 px-2 py-0.5 rounded-md text-[11px] font-semibold flex items-center gap-1 transition"
+                            title="Remover item"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Remover</span>
+                          </button>
+                        )}
+                      </div>
                       <select
                         value={it.produtoId}
                         onChange={(e) => handleUpdateItem(idx, 'produtoId', e.target.value)}
-                        className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 dark:text-white"
+                        className="w-full min-w-0 truncate bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
                       >
                         {produtos.map((p) => (
                           <option key={p.id} value={p.id}>
-                            {p.nome} (Estoque: {p.estoqueAtual})
+                            {p.nome} (Estoque: {p.estoqueAtual} {p.unidade})
                           </option>
                         ))}
                       </select>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveItem(idx)}
-                        className="text-rose-500 p-1 hover:bg-rose-50 rounded"
-                        title="Remover item"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">Qtd</span>
-                        <input
-                          type="number"
-                          min="1"
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end min-w-0">
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Qtd</span>
+                        <QuantityInput
+                          size="sm"
+                          min={1}
+                          step={1}
                           value={it.quantidade}
-                          onChange={(e) => handleUpdateItem(idx, 'quantidade', Math.max(1, parseInt(e.target.value) || 1))}
-                          className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-900 dark:text-white"
+                          onChange={(val) => handleUpdateItem(idx, 'quantidade', val)}
+                          className="w-full min-w-0"
                         />
                       </div>
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">Preço Un. (R$)</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={(it.precoUnitarioCentavos / 100).toFixed(2)}
-                          onChange={(e) => handleUpdateItem(idx, 'precoUnitarioCentavos', Math.round((parseFloat(e.target.value) || 0) * 100))}
-                          className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-900 dark:text-white"
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Preço Un.</span>
+                        <MoneyInput
+                          valueCentavos={it.precoUnitarioCentavos}
+                          onChange={(val) => handleUpdateItem(idx, 'precoUnitarioCentavos', val)}
+                          size="sm"
+                          className="w-full min-w-0"
                         />
                       </div>
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">Origem</span>
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Origem</span>
                         <select
                           value={it.origem}
                           onChange={(e) => handleUpdateItem(idx, 'origem', e.target.value)}
-                          className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-900 dark:text-white"
+                          className="w-full min-w-0 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white h-[34px]"
                         >
-                          <option value="estoque">Sai do Estoque</option>
-                          <option value="producao">Vai para Produção (OP)</option>
+                          <option value="estoque">📦 Sai do Estoque</option>
+                          <option value="producao">🛠️ Vai para Produção (OP)</option>
                         </select>
                       </div>
                     </div>
@@ -643,13 +654,14 @@ export const VendasView: React.FC = () => {
                   <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
                     Número de Parcelas
                   </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="24"
+                  <QuantityInput
+                    size="sm"
+                    min={1}
+                    max={24}
+                    step={1}
                     value={formNumeroParcelas}
-                    onChange={(e) => setFormNumeroParcelas(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white"
+                    onChange={(val) => setFormNumeroParcelas(val)}
+                    className="w-full"
                   />
                 </div>
               </div>
@@ -658,26 +670,24 @@ export const VendasView: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                    Desconto (R$)
+                    Desconto
                   </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={(formDescontoCentavos / 100).toFixed(2)}
-                    onChange={(e) => setFormDescontoCentavos(Math.round((parseFloat(e.target.value) || 0) * 100))}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white"
+                  <MoneyInput
+                    valueCentavos={formDescontoCentavos}
+                    onChange={(val) => setFormDescontoCentavos(val)}
+                    size="sm"
+                    className="w-full"
                   />
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                    Frete (R$)
+                    Frete
                   </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={(formFreteCentavos / 100).toFixed(2)}
-                    onChange={(e) => setFormFreteCentavos(Math.round((parseFloat(e.target.value) || 0) * 100))}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white"
+                  <MoneyInput
+                    valueCentavos={formFreteCentavos}
+                    onChange={(val) => setFormFreteCentavos(val)}
+                    size="sm"
+                    className="w-full"
                   />
                 </div>
               </div>

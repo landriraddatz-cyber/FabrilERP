@@ -11,10 +11,13 @@ import {
   Search,
   X,
   Package,
+  Trash2,
 } from 'lucide-react';
 import { db, ajustarEstoqueManual, receberCompra } from '../db';
 import { formatCurrency, formatDateBr, formatDateTimeBr, todayIsoDate, formatNumber } from '../utils/formatters';
 import { Produto, MovimentoEstoque, Compra, ItemCompra, Pessoa, FormaPagamento } from '../types';
+import { QuantityInput } from '../components/common/QuantityInput';
+import { MoneyInput } from '../components/common/MoneyInput';
 
 export const EstoqueView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'saldos' | 'movimentos' | 'compras'>('saldos');
@@ -117,6 +120,10 @@ export const EstoqueView: React.FC = () => {
         totalCentavos: 10 * mps[0].precoCustoCentavos,
       },
     ]);
+  };
+
+  const handleRemoveItemCompra = (idx: number) => {
+    setCompraItens((prev) => prev.filter((_, i) => i !== idx));
   };
 
   const handleUpdateItemCompra = (idx: number, field: keyof ItemCompra, val: any) => {
@@ -544,14 +551,13 @@ export const EstoqueView: React.FC = () => {
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Novo Saldo Real Contado *
                 </label>
-                <input
-                  type="number"
-                  step="0.001"
-                  min="0"
-                  required
+                <QuantityInput
+                  min={0}
+                  step={1}
                   value={novoEstoqueAjuste}
-                  onChange={(e) => setNovoEstoqueAjuste(parseFloat(e.target.value) || 0)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white font-bold"
+                  onChange={(val) => setNovoEstoqueAjuste(val)}
+                  unit={produtoAjuste?.unidade}
+                  className="w-full"
                 />
               </div>
 
@@ -633,42 +639,61 @@ export const EstoqueView: React.FC = () => {
                 {compraItens.map((it, idx) => (
                   <div
                     key={idx}
-                    className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2"
+                    className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2.5 min-w-0"
                   >
-                    <select
-                      value={it.materiaPrimaId}
-                      onChange={(e) => handleUpdateItemCompra(idx, 'materiaPrimaId', e.target.value)}
-                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 dark:text-white"
-                    >
-                      {produtos
-                        .filter((p) => p.tipo === 'materia_prima' || p.tipo === 'embalagem')
-                        .map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.nome} ({p.unidade})
-                          </option>
-                        ))}
-                    </select>
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                          Item / Descrição da Matéria-Prima
+                        </label>
+                        {compraItens.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItemCompra(idx)}
+                            className="text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 px-2 py-0.5 rounded-md text-[11px] font-semibold flex items-center gap-1 transition"
+                            title="Remover item"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Remover</span>
+                          </button>
+                        )}
+                      </div>
+                      <select
+                        value={it.materiaPrimaId}
+                        onChange={(e) => handleUpdateItemCompra(idx, 'materiaPrimaId', e.target.value)}
+                        className="w-full min-w-0 truncate bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      >
+                        {produtos
+                          .filter((p) => p.tipo === 'materia_prima' || p.tipo === 'embalagem')
+                          .map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.nome} ({p.unidade})
+                            </option>
+                          ))}
+                      </select>
+                    </div>
 
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">Qtd Comprada</span>
-                        <input
-                          type="number"
-                          step="0.001"
-                          min="0.001"
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-end min-w-0">
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Qtd Comprada</span>
+                        <QuantityInput
+                          size="sm"
+                          min={0.001}
+                          step={1}
+                          decimals={3}
                           value={it.quantidade}
-                          onChange={(e) => handleUpdateItemCompra(idx, 'quantidade', parseFloat(e.target.value) || 0)}
-                          className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-900 dark:text-white"
+                          onChange={(val) => handleUpdateItemCompra(idx, 'quantidade', val)}
+                          unit={produtos.find((p) => p.id === it.materiaPrimaId)?.unidade}
+                          className="w-full min-w-0"
                         />
                       </div>
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">Preço Custo Unit. (R$)</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={(it.precoUnitarioCentavos / 100).toFixed(2)}
-                          onChange={(e) => handleUpdateItemCompra(idx, 'precoUnitarioCentavos', Math.round((parseFloat(e.target.value) || 0) * 100))}
-                          className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-900 dark:text-white"
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Preço Custo Unit.</span>
+                        <MoneyInput
+                          valueCentavos={it.precoUnitarioCentavos}
+                          onChange={(val) => handleUpdateItemCompra(idx, 'precoUnitarioCentavos', val)}
+                          size="sm"
+                          className="w-full min-w-0"
                         />
                       </div>
                     </div>
@@ -697,12 +722,14 @@ export const EstoqueView: React.FC = () => {
                   <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
                     Parcelas a Pagar
                   </label>
-                  <input
-                    type="number"
-                    min="1"
+                  <QuantityInput
+                    size="sm"
+                    min={1}
+                    max={60}
+                    step={1}
                     value={compraParcelas}
-                    onChange={(e) => setCompraParcelas(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white"
+                    onChange={(val) => setCompraParcelas(val)}
+                    className="w-full"
                   />
                 </div>
               </div>

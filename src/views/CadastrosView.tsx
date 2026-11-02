@@ -14,7 +14,9 @@ import {
 import { db } from '../db';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import { Pessoa, Produto, Categoria, FormaPagamento, ContaBancaria, TipoProduto, PlanoConta, GrupoDRE } from '../types';
-import { Edit2 } from 'lucide-react';
+import { QuantityInput } from '../components/common/QuantityInput';
+import { MoneyInput } from '../components/common/MoneyInput';
+import { PlanoContasView } from '../components/dre/PlanoContasView';
 
 export const CadastrosView: React.FC = () => {
   const [subTab, setSubTab] = useState<'produtos' | 'pessoas' | 'categorias' | 'financeiro' | 'planocontas'>('produtos');
@@ -26,15 +28,6 @@ export const CadastrosView: React.FC = () => {
   const [planoContas, setPlanoContas] = useState<PlanoConta[]>([]);
 
   const [searchTerm, setSearchTerm] = useState('');
-
-  // Modal Plano de Contas
-  const [isPlanoModalOpen, setIsPlanoModalOpen] = useState(false);
-  const [editingPlanoId, setEditingPlanoId] = useState<string | null>(null);
-  const [planoCodigo, setPlanoCodigo] = useState('');
-  const [planoNome, setPlanoNome] = useState('');
-  const [planoTipo, setPlanoTipo] = useState<'receita' | 'despesa'>('despesa');
-  const [planoGrupoDRE, setPlanoGrupoDRE] = useState<GrupoDRE>('despesa_administrativa');
-  const [planoContaPaiId, setPlanoContaPaiId] = useState('');
 
   // Modal Pessoas
   const [isPessoaModalOpen, setIsPessoaModalOpen] = useState(false);
@@ -163,62 +156,6 @@ export const CadastrosView: React.FC = () => {
     await carregarDados();
   };
 
-  const handleSalvarPlano = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!planoCodigo || !planoNome) return;
-
-    const agora = new Date().toISOString();
-    if (editingPlanoId) {
-      await db.planoContas.update(editingPlanoId, {
-        codigo: planoCodigo.trim(),
-        nome: planoNome.trim(),
-        tipo: planoTipo,
-        grupoDRE: planoGrupoDRE,
-        contaPaiId: planoContaPaiId || undefined,
-        dataAlteracao: agora,
-      });
-    } else {
-      const id = 'pc_' + Date.now();
-      await db.planoContas.add({
-        id,
-        codigo: planoCodigo.trim(),
-        nome: planoNome.trim(),
-        tipo: planoTipo,
-        grupoDRE: planoGrupoDRE,
-        contaPaiId: planoContaPaiId || undefined,
-        excluido: false,
-        dataCriacao: agora,
-        dataAlteracao: agora,
-      });
-    }
-
-    setIsPlanoModalOpen(false);
-    setEditingPlanoId(null);
-    setPlanoCodigo('');
-    setPlanoNome('');
-    await carregarDados();
-  };
-
-  const abrirNovoPlano = () => {
-    setEditingPlanoId(null);
-    setPlanoCodigo('');
-    setPlanoNome('');
-    setPlanoTipo('despesa');
-    setPlanoGrupoDRE('despesa_administrativa');
-    setPlanoContaPaiId('');
-    setIsPlanoModalOpen(true);
-  };
-
-  const abrirEdicaoPlano = (p: PlanoConta) => {
-    setEditingPlanoId(p.id);
-    setPlanoCodigo(p.codigo);
-    setPlanoNome(p.nome);
-    setPlanoTipo(p.tipo);
-    setPlanoGrupoDRE(p.grupoDRE);
-    setPlanoContaPaiId(p.contaPaiId || '');
-    setIsPlanoModalOpen(true);
-  };
-
   return (
     <div className="p-4 space-y-4 max-w-xl mx-auto pb-28">
       {/* Header */}
@@ -229,18 +166,19 @@ export const CadastrosView: React.FC = () => {
             Pessoas, produtos, categorias, plano de contas e bancos
           </p>
         </div>
-        <button
-          onClick={() => {
-            if (subTab === 'pessoas') setIsPessoaModalOpen(true);
-            else if (subTab === 'produtos') setIsProdutoModalOpen(true);
-            else if (subTab === 'categorias') setIsCategoriaModalOpen(true);
-            else if (subTab === 'planocontas') abrirNovoPlano();
-          }}
-          className="flex items-center gap-1.5 bg-sky-600 hover:bg-sky-500 text-white px-3 py-2 rounded-xl text-xs font-bold transition shadow-xs"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Novo</span>
-        </button>
+        {subTab !== 'planocontas' && (
+          <button
+            onClick={() => {
+              if (subTab === 'pessoas') setIsPessoaModalOpen(true);
+              else if (subTab === 'produtos') setIsProdutoModalOpen(true);
+              else if (subTab === 'categorias') setIsCategoriaModalOpen(true);
+            }}
+            className="flex items-center gap-1.5 bg-sky-600 hover:bg-sky-500 text-white px-3 py-2 rounded-xl text-xs font-bold transition shadow-xs"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Novo</span>
+          </button>
+        )}
       </div>
 
       {/* Sub Tabs */}
@@ -412,61 +350,12 @@ export const CadastrosView: React.FC = () => {
       )}
 
       {/* SubTab 5: Plano de Contas */}
-      {subTab === 'planocontas' && (
-        <div className="space-y-3">
-          <div className="bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-900/60 p-3 rounded-2xl text-xs text-sky-900 dark:text-sky-300">
-            <strong>Plano de Contas Gerencial:</strong> Estrutura contábil que alimenta o DRE da fábrica. O DRE calcula automaticamente receitas, CMV e despesas conforme o grupo associado a cada conta.
-          </div>
-
-          <div className="space-y-2">
-            {planoContas.map((p) => (
-              <div
-                key={p.id}
-                className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex justify-between items-center"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-mono font-black text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
-                      {p.codigo}
-                    </span>
-                    <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                      {p.nome}
-                    </h4>
-                  </div>
-                  <div className="flex items-center gap-2 mt-1.5 text-[10px]">
-                    <span
-                      className={`px-2 py-0.5 rounded-md font-bold uppercase tracking-wider ${
-                        p.tipo === 'receita'
-                          ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400'
-                          : 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400'
-                      }`}
-                    >
-                      {p.tipo}
-                    </span>
-                    <span className="text-slate-400">
-                      Grupo DRE: <strong className="text-slate-700 dark:text-slate-300 font-semibold">{p.grupoDRE}</strong>
-                    </span>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => abrirEdicaoPlano(p)}
-                  className="p-2 text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-                  title="Editar conta do plano"
-                >
-                  <Edit2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {subTab === 'planocontas' && <PlanoContasView />}
 
       {/* Modal Pessoa */}
       {isPessoaModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4">
-          <div className="w-full sm:max-w-md bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-5 animate-in slide-in-from-bottom-6">
+          <div className="w-full sm:max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-5 animate-in slide-in-from-bottom-6">
             <div className="flex justify-between items-center pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
               <h3 className="font-bold text-sm text-slate-900 dark:text-white">Cadastrar Pessoa</h3>
               <button onClick={() => setIsPessoaModalOpen(false)} className="text-slate-400">
@@ -575,7 +464,7 @@ export const CadastrosView: React.FC = () => {
       {/* Modal Produto */}
       {isProdutoModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4">
-          <div className="w-full sm:max-w-md bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-5 animate-in slide-in-from-bottom-6">
+          <div className="w-full sm:max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-5 animate-in slide-in-from-bottom-6">
             <div className="flex justify-between items-center pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
               <h3 className="font-bold text-sm text-slate-900 dark:text-white">Cadastrar Produto / Insumo</h3>
               <button onClick={() => setIsProdutoModalOpen(false)} className="text-slate-400">
@@ -612,13 +501,16 @@ export const CadastrosView: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-[11px] font-semibold text-slate-600 block mb-1">Nome do Item *</label>
+                <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                  Descrição / Nome do Item *
+                </label>
                 <input
                   type="text"
                   required
+                  placeholder="Ex: Pão de Mel Artesanal 80g, Farinha de Trigo..."
                   value={prodNome}
                   onChange={(e) => setProdNome(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white font-medium"
                 />
               </div>
 
@@ -634,48 +526,50 @@ export const CadastrosView: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">Estoque Mínimo</label>
-                  <input
-                    type="number"
-                    min="0"
+                  <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">Estoque Mínimo</label>
+                  <QuantityInput
+                    size="sm"
+                    min={0}
+                    step={1}
                     value={prodEstoqueMinimo}
-                    onChange={(e) => setProdEstoqueMinimo(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2 text-xs text-slate-900 dark:text-white"
+                    onChange={(val) => setProdEstoqueMinimo(val)}
+                    unit={prodUnidade}
+                    className="w-full"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">Preço de Custo (R$)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={(prodPrecoCustoCentavos / 100).toFixed(2)}
-                    onChange={(e) => setProdPrecoCustoCentavos(Math.round((parseFloat(e.target.value) || 0) * 100))}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2 text-xs text-slate-900 dark:text-white"
+                  <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">Preço de Custo</label>
+                  <MoneyInput
+                    valueCentavos={prodPrecoCustoCentavos}
+                    onChange={(val) => setProdPrecoCustoCentavos(val)}
+                    size="sm"
+                    className="w-full"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">Preço de Venda (R$)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={(prodPrecoVendaCentavos / 100).toFixed(2)}
-                    onChange={(e) => setProdPrecoVendaCentavos(Math.round((parseFloat(e.target.value) || 0) * 100))}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2 text-xs text-slate-900 dark:text-white"
+                  <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">Preço de Venda</label>
+                  <MoneyInput
+                    valueCentavos={prodPrecoVendaCentavos}
+                    onChange={(val) => setProdPrecoVendaCentavos(val)}
+                    size="sm"
+                    className="w-full"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-[11px] font-semibold text-slate-600 block mb-1">Estoque Inicial</label>
-                <input
-                  type="number"
-                  step="0.001"
+                <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">Estoque Inicial</label>
+                <QuantityInput
+                  size="sm"
+                  min={0}
+                  step={1}
                   value={prodEstoqueAtual}
-                  onChange={(e) => setProdEstoqueAtual(parseFloat(e.target.value) || 0)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white"
+                  onChange={(val) => setProdEstoqueAtual(val)}
+                  unit={prodUnidade}
+                  className="w-full"
                 />
               </div>
 
@@ -717,131 +611,6 @@ export const CadastrosView: React.FC = () => {
                   className="flex-1 py-2 bg-sky-600 text-white text-xs rounded-xl font-bold"
                 >
                   Salvar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Plano de Contas */}
-      {isPlanoModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4">
-          <div className="w-full sm:max-w-md bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-5 animate-in slide-in-from-bottom-6">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
-              <div>
-                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
-                  {editingPlanoId ? 'Editar Conta do Plano' : 'Nova Conta no Plano'}
-                </h3>
-                <p className="text-[11px] text-slate-500">Classificação para o DRE da fábrica</p>
-              </div>
-              <button
-                onClick={() => setIsPlanoModalOpen(false)}
-                className="p-1 rounded-full text-slate-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSalvarPlano} className="space-y-3">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                    Código Contábil *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: 4.09, 1.05"
-                    value={planoCodigo}
-                    onChange={(e) => setPlanoCodigo(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white font-mono font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                    Natureza *
-                  </label>
-                  <select
-                    value={planoTipo}
-                    onChange={(e) => setPlanoTipo(e.target.value as any)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2 text-xs text-slate-900 dark:text-white font-semibold"
-                  >
-                    <option value="despesa">Despesa (Saída)</option>
-                    <option value="receita">Receita (Entrada)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                  Nome da Conta *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ex: Material de Limpeza, Manutenção de Moldes..."
-                  value={planoNome}
-                  onChange={(e) => setPlanoNome(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                  Grupo no DRE *
-                </label>
-                <select
-                  value={planoGrupoDRE}
-                  onChange={(e) => setPlanoGrupoDRE(e.target.value as any)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-900 dark:text-white"
-                >
-                  <option value="despesa_administrativa">Despesas Administrativas (aluguel, salários adm, contador)</option>
-                  <option value="despesa_venda">Despesas com Vendas (marketing, fretes vendas, comissões)</option>
-                  <option value="despesa_financeira">Despesas Financeiras (juros pagos, tarifas bancárias, maquininha)</option>
-                  <option value="receita_financeira">Receitas Financeiras (rendimentos aplicações, descontos obtidos)</option>
-                  <option value="receita_venda">Receita Bruta de Vendas (produtos faturados)</option>
-                  <option value="deducao">Deduções sobre Vendas (impostos sobre faturamento, devoluções)</option>
-                  <option value="custo_producao">Custos de Produção / Fábrica (energia fábrica, embalagens)</option>
-                  <option value="outras">Outras Receitas / Despesas Operacionais</option>
-                  <option value="imposto_lucro">Tributos sobre o Lucro (IRPJ / CSLL)</option>
-                  <option value="nenhum">Nenhum / Não afeta DRE (retiradas sócios, empréstimos)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                  Conta Pai (Opcional)
-                </label>
-                <select
-                  value={planoContaPaiId}
-                  onChange={(e) => setPlanoContaPaiId(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-900 dark:text-white"
-                >
-                  <option value="">Nenhuma (Conta Sintética Principal)</option>
-                  {planoContas
-                    .filter((pc) => pc.id !== editingPlanoId)
-                    .map((pc) => (
-                      <option key={pc.id} value={pc.id}>
-                        {pc.codigo} - {pc.nome}
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsPlanoModalOpen(false)}
-                  className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-800 text-xs rounded-xl font-semibold text-slate-700 dark:text-slate-300"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 bg-sky-600 hover:bg-sky-500 text-white text-xs rounded-xl font-bold transition"
-                >
-                  {editingPlanoId ? 'Salvar Alterações' : 'Criar Conta'}
                 </button>
               </div>
             </form>

@@ -1,6 +1,47 @@
 import { db } from './index';
 import { todayIsoDate, addDaysIso } from '../utils/formatters';
 
+export async function ensureDefaultPlanoContas() {
+  const count = await db.planoContas.count();
+  if (count > 0) return;
+
+  const agora = new Date().toISOString();
+  await db.planoContas.bulkAdd([
+    // Receita de Venda
+    { id: 'pc-vendas-produtos', codigo: '1.01', nome: 'Vendas de produtos', tipo: 'receita', grupoDRE: 'receita_venda', padrao: true, excluido: false, dataCriacao: agora, dataAlteracao: agora },
+    // Deduções
+    { id: 'pc-impostos-vendas', codigo: '1.02', nome: 'Impostos sobre vendas', tipo: 'despesa', grupoDRE: 'deducao', padrao: true, excluido: false, dataCriacao: agora, dataAlteracao: agora },
+    { id: 'pc-descontos-concedidos', codigo: '1.03', nome: 'Descontos concedidos', tipo: 'despesa', grupoDRE: 'deducao', padrao: true, excluido: false, dataCriacao: agora, dataAlteracao: agora },
+    { id: 'pc-devolucoes', codigo: '1.04', nome: 'Devoluções', tipo: 'despesa', grupoDRE: 'deducao', padrao: true, excluido: false, dataCriacao: agora, dataAlteracao: agora },
+    // Despesas com Vendas
+    { id: 'pc-comissoes', codigo: '2.01', nome: 'Comissões', tipo: 'despesa', grupoDRE: 'despesa_venda', padrao: true, excluido: false, dataCriacao: agora, dataAlteracao: agora },
+    { id: 'pc-fretes-vendas', codigo: '2.02', nome: 'Fretes sobre vendas', tipo: 'despesa', grupoDRE: 'despesa_venda', padrao: true, excluido: false, dataCriacao: agora, dataAlteracao: agora },
+    { id: 'pc-marketing', codigo: '2.03', nome: 'Marketing', tipo: 'despesa', grupoDRE: 'despesa_venda', padrao: true, excluido: false, dataCriacao: agora, dataAlteracao: agora },
+    // Despesas Administrativas
+    { id: 'pc-aluguel', codigo: '3.01', nome: 'Aluguel', tipo: 'despesa', grupoDRE: 'despesa_administrativa', padrao: true, excluido: false, dataCriacao: agora, dataAlteracao: agora },
+    { id: 'pc-salarios-adm', codigo: '3.02', nome: 'Salários administrativos', tipo: 'despesa', grupoDRE: 'despesa_administrativa', padrao: true, excluido: false, dataCriacao: agora, dataAlteracao: agora },
+    { id: 'pc-contador', codigo: '3.03', nome: 'Contador', tipo: 'despesa', grupoDRE: 'despesa_administrativa', padrao: true, excluido: false, dataCriacao: agora, dataAlteracao: agora },
+    { id: 'pc-internet-tel', codigo: '3.04', nome: 'Internet e telefone', tipo: 'despesa', grupoDRE: 'despesa_administrativa', padrao: true, excluido: false, dataCriacao: agora, dataAlteracao: agora },
+    { id: 'pc-material-escritorio', codigo: '3.05', nome: 'Material de escritório', tipo: 'despesa', grupoDRE: 'despesa_administrativa', padrao: true, excluido: false, dataCriacao: agora, dataAlteracao: agora },
+    // Custo de Produção (Entra no CMV via OP)
+    { id: 'pc-energia-fabrica', codigo: '4.01', nome: 'Energia da fábrica', tipo: 'despesa', grupoDRE: 'custo_producao', padrao: true, excluido: false, dataCriacao: agora, dataAlteracao: agora },
+    { id: 'pc-mao-obra-fabrica', codigo: '4.02', nome: 'Mão de obra da fábrica', tipo: 'despesa', grupoDRE: 'custo_producao', padrao: true, excluido: false, dataCriacao: agora, dataAlteracao: agora },
+    { id: 'pc-embalagens-fabrica', codigo: '4.03', nome: 'Embalagens', tipo: 'despesa', grupoDRE: 'custo_producao', padrao: true, excluido: false, dataCriacao: agora, dataAlteracao: agora },
+    // Despesas Financeiras
+    { id: 'pc-juros-pagos', codigo: '5.01', nome: 'Juros pagos', tipo: 'despesa', grupoDRE: 'despesa_financeira', padrao: true, excluido: false, dataCriacao: agora, dataAlteracao: agora },
+    { id: 'pc-tarifas-bancarias', codigo: '5.02', nome: 'Tarifas bancárias', tipo: 'despesa', grupoDRE: 'despesa_financeira', padrao: true, excluido: false, dataCriacao: agora, dataAlteracao: agora },
+    { id: 'pc-taxas-cartao', codigo: '5.03', nome: 'Taxas de cartão', tipo: 'despesa', grupoDRE: 'despesa_financeira', padrao: true, excluido: false, dataCriacao: agora, dataAlteracao: agora },
+    // Receitas Financeiras
+    { id: 'pc-rendimentos', codigo: '6.01', nome: 'Rendimentos', tipo: 'receita', grupoDRE: 'receita_financeira', padrao: true, excluido: false, dataCriacao: agora, dataAlteracao: agora },
+    // Imposto sobre Lucro
+    { id: 'pc-irpj-csll', codigo: '7.01', nome: 'IRPJ e CSLL', tipo: 'despesa', grupoDRE: 'imposto_lucro', padrao: true, excluido: false, dataCriacao: agora, dataAlteracao: agora },
+    // Nenhum (Fora do DRE)
+    { id: 'pc-retiradas-dono', codigo: '8.01', nome: 'Retiradas do dono', tipo: 'despesa', grupoDRE: 'nenhum', padrao: true, excluido: false, dataCriacao: agora, dataAlteracao: agora },
+    { id: 'pc-emprestimos', codigo: '8.02', nome: 'Empréstimos', tipo: 'despesa', grupoDRE: 'nenhum', padrao: true, excluido: false, dataCriacao: agora, dataAlteracao: agora },
+    { id: 'pc-transferencias', codigo: '8.03', nome: 'Transferências entre contas', tipo: 'despesa', grupoDRE: 'nenhum', padrao: true, excluido: false, dataCriacao: agora, dataAlteracao: agora },
+  ]);
+}
+
 export async function seedSampleData(forceClear: boolean = false) {
   if (forceClear) {
     await db.transaction('rw', [
@@ -36,6 +77,7 @@ export async function seedSampleData(forceClear: boolean = false) {
 
   const count = await db.produtos.count();
   if (count > 0 && !forceClear) {
+    await ensureDefaultPlanoContas();
     return; // Already seeded
   }
 

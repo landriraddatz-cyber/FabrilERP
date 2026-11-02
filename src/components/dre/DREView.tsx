@@ -14,6 +14,7 @@ import {
   ArrowRight,
   X,
   CheckCircle2,
+  BookOpen,
 } from 'lucide-react';
 import { db } from '../../db';
 import {
@@ -24,10 +25,12 @@ import {
 } from '../../utils/formatters';
 import { calcularDRE, RegimeDespesas, DREResult } from '../../utils/dre';
 import { Venda, ContaFinanceiraItem, PlanoConta } from '../../types';
+import { PlanoContasView } from './PlanoContasView';
 
 export const DREView: React.FC = () => {
   const [periodoTipo, setPeriodoTipo] = useState<'mes' | 'trimestre' | 'ano' | 'livre'>('mes');
   const [regime, setRegime] = useState<RegimeDespesas>('competencia');
+  const [dreSubTab, setDreSubTab] = useState<'relatorio' | 'plano'>('relatorio');
 
   // Dates
   const hoje = todayIsoDate();
@@ -278,93 +281,130 @@ export const DREView: React.FC = () => {
           </div>
         </div>
 
-        {/* Period Buttons */}
-        <div className="flex gap-1.5 bg-slate-100 dark:bg-slate-800/70 p-1 rounded-xl">
-          {[
-            { id: 'mes', label: 'Mês Atual' },
-            { id: 'trimestre', label: 'Trimestre' },
-            { id: 'ano', label: 'Ano' },
-            { id: 'livre', label: 'Personalizado' },
-          ].map((p) => (
-            <button
-              key={p.id}
-              onClick={() => handleTrocaPeriodo(p.id as any)}
-              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${
-                periodoTipo === p.id
-                  ? 'bg-white dark:bg-slate-900 text-sky-600 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Custom date range inputs */}
-        {periodoTipo === 'livre' && (
-          <div className="grid grid-cols-2 gap-2 pt-1">
-            <div>
-              <span className="text-[10px] text-slate-500 block mb-0.5">Data Início:</span>
-              <input
-                type="date"
-                value={dataInicio}
-                onChange={(e) => setDataInicio(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-900 dark:text-white"
-              />
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-500 block mb-0.5">Data Fim:</span>
-              <input
-                type="date"
-                value={dataFim}
-                onChange={(e) => setDataFim(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-900 dark:text-white"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Despesas por: Competência ou Pagamento (Switch requested by prompt) */}
-        <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Despesas por:
-            </span>
-            <div className="inline-flex bg-slate-200/80 dark:bg-slate-800 p-0.5 rounded-lg text-xs font-bold">
-              <button
-                type="button"
-                onClick={() => setRegime('competencia')}
-                className={`px-2 py-1 rounded-md transition ${
-                  regime === 'competencia'
-                    ? 'bg-white dark:bg-slate-900 text-sky-600 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400'
-                }`}
-              >
-                Competência (Padrão)
-              </button>
-              <button
-                type="button"
-                onClick={() => setRegime('pagamento')}
-                className={`px-2 py-1 rounded-md transition ${
-                  regime === 'pagamento'
-                    ? 'bg-white dark:bg-slate-900 text-sky-600 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400'
-                }`}
-              >
-                Pagamento
-              </button>
-            </div>
-          </div>
-
-          <div
-            className="flex items-center gap-1 text-[10px] text-slate-400 max-w-[190px] leading-tight text-right"
-            title="Troca apenas a data das despesas e receitas avulsas; vendas e CMV sempre seguem a data do pedido."
+        {/* SubTab Toggle: Relatório DRE vs Plano de Contas */}
+        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+          <button
+            type="button"
+            onClick={() => setDreSubTab('relatorio')}
+            className={`flex-1 py-1.5 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition ${
+              dreSubTab === 'relatorio'
+                ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-2xs'
+                : 'text-slate-500 hover:text-slate-900'
+            }`}
           >
-            <Info className="w-3.5 h-3.5 shrink-0" />
-            <span>Vendas e CMV sempre seguem data do pedido</span>
-          </div>
+            <TrendingUp className="w-3.5 h-3.5" />
+            <span>Demonstrativo DRE</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setDreSubTab('plano')}
+            className={`flex-1 py-1.5 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition ${
+              dreSubTab === 'plano'
+                ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-2xs'
+                : 'text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>Plano de Contas DRE ({planoContas.length})</span>
+          </button>
         </div>
+
+        {dreSubTab === 'relatorio' && (
+          <>
+            {/* Period Buttons */}
+            <div className="flex gap-1.5 bg-slate-100 dark:bg-slate-800/70 p-1 rounded-xl">
+              {[
+                { id: 'mes', label: 'Mês Atual' },
+                { id: 'trimestre', label: 'Trimestre' },
+                { id: 'ano', label: 'Ano' },
+                { id: 'livre', label: 'Personalizado' },
+              ].map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => handleTrocaPeriodo(p.id as any)}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${
+                    periodoTipo === p.id
+                      ? 'bg-white dark:bg-slate-900 text-sky-600 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Custom date range inputs */}
+            {periodoTipo === 'livre' && (
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <div>
+                  <span className="text-[10px] text-slate-500 block mb-0.5">Data Início:</span>
+                  <input
+                    type="date"
+                    value={dataInicio}
+                    onChange={(e) => setDataInicio(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 block mb-0.5">Data Fim:</span>
+                  <input
+                    type="date"
+                    value={dataFim}
+                    onChange={(e) => setDataFim(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Despesas por: Competência ou Pagamento (Switch requested by prompt) */}
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Despesas por:
+                </span>
+                <div className="inline-flex bg-slate-200/80 dark:bg-slate-800 p-0.5 rounded-lg text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setRegime('competencia')}
+                    className={`px-2 py-1 rounded-md transition ${
+                      regime === 'competencia'
+                        ? 'bg-white dark:bg-slate-900 text-sky-600 shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    Competência (Padrão)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRegime('pagamento')}
+                    className={`px-2 py-1 rounded-md transition ${
+                      regime === 'pagamento'
+                        ? 'bg-white dark:bg-slate-900 text-sky-600 shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    Pagamento
+                  </button>
+                </div>
+              </div>
+
+              <div
+                className="flex items-center gap-1 text-[10px] text-slate-400 max-w-[190px] leading-tight text-right"
+                title="Troca apenas a data das despesas e receitas avulsas; vendas e CMV sempre seguem a data do pedido."
+              >
+                <Info className="w-3.5 h-3.5 shrink-0" />
+                <span>Vendas e CMV sempre seguem data do pedido</span>
+              </div>
+            </div>
+          </>
+        )}
       </div>
+
+      {dreSubTab === 'plano' ? (
+        <PlanoContasView />
+      ) : (
+        <>
 
       {/* 2. Top Highlight KPI Cards: Margem Bruta & Margem Líquida */}
       <div className="grid grid-cols-2 gap-3">
@@ -694,6 +734,8 @@ export const DREView: React.FC = () => {
           })}
         </div>
       </div>
+      </>
+      )}
 
       {/* Modal Drilldown dos Lançamentos da Conta do Plano */}
       {selectedPlanoContaModal && (
