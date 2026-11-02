@@ -10,6 +10,7 @@ import {
   Phone,
   Building,
   Check,
+  AlertCircle,
 } from 'lucide-react';
 import { db } from '../db';
 import { formatCurrency, formatNumber } from '../utils/formatters';
@@ -52,6 +53,7 @@ export const CadastrosView: React.FC = () => {
   const [prodPrecoVendaCentavos, setProdPrecoVendaCentavos] = useState(0);
   const [prodEstoqueMinimo, setProdEstoqueMinimo] = useState(10);
   const [prodEstoqueAtual, setProdEstoqueAtual] = useState(0);
+  const [prodFormSubmitted, setProdFormSubmitted] = useState(false);
 
   // Modal Categorias
   const [isCategoriaModalOpen, setIsCategoriaModalOpen] = useState(false);
@@ -111,7 +113,9 @@ export const CadastrosView: React.FC = () => {
 
   const handleSalvarProduto = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prodNome || !prodCodigo) return;
+    setProdFormSubmitted(true);
+    if (!prodNome.trim() || !prodCodigo.trim()) return;
+    if (prodTipo === 'produto_acabado' && prodPrecoVendaCentavos <= 0) return;
 
     const agora = new Date().toISOString();
     const id = 'prod_' + Date.now();
@@ -119,10 +123,10 @@ export const CadastrosView: React.FC = () => {
     await db.produtos.add({
       id,
       tipo: prodTipo,
-      codigo: prodCodigo.toUpperCase(),
-      nome: prodNome,
+      codigo: prodCodigo.toUpperCase().trim(),
+      nome: prodNome.trim(),
       categoriaId: prodCategoriaId || categorias[0]?.id || '',
-      unidade: prodUnidade.toUpperCase(),
+      unidade: prodUnidade.toUpperCase().trim(),
       precoCustoCentavos: prodPrecoCustoCentavos,
       precoVendaCentavos: prodPrecoVendaCentavos,
       estoqueMinimo: prodEstoqueMinimo,
@@ -133,6 +137,7 @@ export const CadastrosView: React.FC = () => {
     });
 
     setIsProdutoModalOpen(false);
+    setProdFormSubmitted(false);
     await carregarDados();
   };
 
@@ -495,8 +500,18 @@ export const CadastrosView: React.FC = () => {
                     placeholder="Ex: MP-05, PA-10"
                     value={prodCodigo}
                     onChange={(e) => setProdCodigo(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2 text-xs text-slate-900 dark:text-white"
+                    className={`w-full bg-slate-50 dark:bg-slate-800 border rounded-xl px-2 py-2 text-xs text-slate-900 dark:text-white transition ${
+                      prodFormSubmitted && !prodCodigo.trim()
+                        ? 'border-rose-500 bg-rose-50/30 dark:bg-rose-950/20 focus:ring-2 focus:ring-rose-500/20'
+                        : 'border-slate-200 dark:border-slate-700'
+                    }`}
                   />
+                  {prodFormSubmitted && !prodCodigo.trim() && (
+                    <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 mt-1 flex items-center gap-1.5 animate-in fade-in duration-150">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                      <span>Código é obrigatório.</span>
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -510,8 +525,18 @@ export const CadastrosView: React.FC = () => {
                   placeholder="Ex: Pão de Mel Artesanal 80g, Farinha de Trigo..."
                   value={prodNome}
                   onChange={(e) => setProdNome(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white font-medium"
+                  className={`w-full bg-slate-50 dark:bg-slate-800 border rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white font-medium transition ${
+                    prodFormSubmitted && !prodNome.trim()
+                      ? 'border-rose-500 bg-rose-50/30 dark:bg-rose-950/20 focus:ring-2 focus:ring-rose-500/20'
+                      : 'border-slate-200 dark:border-slate-700'
+                  }`}
                 />
+                {prodFormSubmitted && !prodNome.trim() && (
+                  <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 mt-1 flex items-center gap-1.5 animate-in fade-in duration-150">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                    <span>Nome do item é obrigatório.</span>
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -555,6 +580,16 @@ export const CadastrosView: React.FC = () => {
                     valueCentavos={prodPrecoVendaCentavos}
                     onChange={(val) => setProdPrecoVendaCentavos(val)}
                     size="sm"
+                    warning={
+                      prodPrecoVendaCentavos < prodPrecoCustoCentavos && prodPrecoVendaCentavos > 0
+                        ? 'Atenção: Preço menor que o custo'
+                        : null
+                    }
+                    error={
+                      prodFormSubmitted && prodTipo === 'produto_acabado' && prodPrecoVendaCentavos <= 0
+                        ? 'Preço de venda obrigatório'
+                        : null
+                    }
                     className="w-full"
                   />
                 </div>

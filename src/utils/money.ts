@@ -82,14 +82,14 @@ export function formatCentavosToInput(centavos: number): string {
  * - Converte '.' em ','
  * - Permite no máximo uma vírgula
  * - Limita a 2 casas decimais após a vírgula
- * - Permite apenas dígitos e vírgula (e sinal de menos no início se permitido)
+ * - Permite apenas dígitos e vírgula (e sinal de menos no início para detecção de validação)
  */
-export function sanitizeMoneyInputText(text: string, allowNegative = false): string {
+export function sanitizeMoneyInputText(text: string, allowNegative = false, preserveNegativeForValidation = true): string {
   if (!text) return '';
 
-  let sanitized = text;
+  let sanitized = String(text).trim();
 
-  const isNeg = allowNegative && sanitized.startsWith('-');
+  const isNeg = sanitized.startsWith('-');
   sanitized = sanitized.replace(/-/g, '');
 
   // Substitui pontos por vírgulas para padronizar
@@ -108,5 +108,6 @@ export function sanitizeMoneyInputText(text: string, allowNegative = false): str
     sanitized = `${before},${after}`;
   }
 
-  return isNeg ? `-${sanitized}` : sanitized;
+  const shouldKeepNegative = isNeg && (allowNegative || preserveNegativeForValidation);
+  return shouldKeepNegative ? `-${sanitized}` : sanitized;
 }

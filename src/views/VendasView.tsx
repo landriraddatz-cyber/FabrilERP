@@ -44,6 +44,7 @@ export const VendasView: React.FC = () => {
   const [formFreteCentavos, setFormFreteCentavos] = useState(0);
   const [formObservacoes, setFormObservacoes] = useState('');
   const [formItens, setFormItens] = useState<ItemVenda[]>([]);
+  const [formSubmitted, setFormSubmitted] = useState(false);
 
   const carregarDados = async () => {
     const todasVendas = await db.vendas.filter((v) => !v.excluido).reverse().toArray();
@@ -96,6 +97,7 @@ export const VendasView: React.FC = () => {
     }
 
     setVendaEmEdicao(null);
+    setFormSubmitted(false);
     setIsModalOpen(true);
   };
 
@@ -145,8 +147,15 @@ export const VendasView: React.FC = () => {
 
   const handleSalvarVenda = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormSubmitted(true);
+
     if (!formClienteId || formItens.length === 0) {
-      alert('Selecione um cliente e ao menos um produto.');
+      return;
+    }
+    if (formDescontoCentavos > subtotalCentavos) {
+      return;
+    }
+    if (formItens.some((i) => i.quantidade <= 0 || i.precoUnitarioCentavos <= 0)) {
       return;
     }
 
@@ -535,14 +544,25 @@ export const VendasView: React.FC = () => {
                   value={formClienteId}
                   onChange={(e) => setFormClienteId(e.target.value)}
                   required
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  className={`w-full bg-slate-50 dark:bg-slate-800 border rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none transition ${
+                    formSubmitted && !formClienteId
+                      ? 'border-rose-500 bg-rose-50/30 dark:bg-rose-950/20 focus:ring-2 focus:ring-rose-500/20'
+                      : 'border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-sky-500'
+                  }`}
                 >
+                  <option value="" disabled>Selecione um cliente...</option>
                   {clientes.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.nome} {c.cpfCnpj ? `(${c.cpfCnpj})` : ''}
                     </option>
                   ))}
                 </select>
+                {formSubmitted && !formClienteId && (
+                  <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 mt-1 flex items-center gap-1.5 animate-in fade-in duration-150">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                    <span>Selecione um cliente para prosseguir com a venda.</span>
+                  </p>
+                )}
               </div>
 
               {/* Itens */}
@@ -559,6 +579,13 @@ export const VendasView: React.FC = () => {
                     <Plus className="w-3.5 h-3.5" /> Adicionar Item
                   </button>
                 </div>
+
+                {formSubmitted && formItens.length === 0 && (
+                  <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 flex items-center gap-1.5 p-2 rounded-xl bg-rose-50/40 dark:bg-rose-950/20 border border-rose-300 dark:border-rose-800 animate-in fade-in duration-150">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                    <span>Adicione ao menos um item para registrar a venda.</span>
+                  </p>
+                )}
 
                 {formItens.map((it, idx) => (
                   <div
@@ -602,8 +629,10 @@ export const VendasView: React.FC = () => {
                           size="sm"
                           min={1}
                           step={1}
+                          required
                           value={it.quantidade}
                           onChange={(val) => handleUpdateItem(idx, 'quantidade', val)}
+                          error={formSubmitted && it.quantidade <= 0 ? 'Qtd mínima é 1' : null}
                           className="w-full min-w-0"
                         />
                       </div>
@@ -612,6 +641,8 @@ export const VendasView: React.FC = () => {
                         <MoneyInput
                           valueCentavos={it.precoUnitarioCentavos}
                           onChange={(val) => handleUpdateItem(idx, 'precoUnitarioCentavos', val)}
+                          required
+                          error={formSubmitted && it.precoUnitarioCentavos <= 0 ? 'Preço deve ser maior que zero' : null}
                           size="sm"
                           className="w-full min-w-0"
                         />
@@ -676,6 +707,11 @@ export const VendasView: React.FC = () => {
                     valueCentavos={formDescontoCentavos}
                     onChange={(val) => setFormDescontoCentavos(val)}
                     size="sm"
+                    error={
+                      formDescontoCentavos > subtotalCentavos
+                        ? `Desconto não pode superar o subtotal (${formatCurrency(subtotalCentavos)})`
+                        : null
+                    }
                     className="w-full"
                   />
                 </div>

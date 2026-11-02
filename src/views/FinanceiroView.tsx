@@ -12,6 +12,11 @@ import {
   AlertCircle,
   Building,
   BookOpen,
+  Eye,
+  Pencil,
+  Trash2,
+  RotateCcw,
+  AlertTriangle,
 } from 'lucide-react';
 import { db, baixarContaFinanceira } from '../db';
 import {
@@ -45,10 +50,28 @@ export const FinanceiroView: React.FC = () => {
   const [avulsoDescricao, setAvulsoDescricao] = useState('');
   const [avulsoValorCentavos, setAvulsoValorCentavos] = useState(0);
   const [avulsoVencimento, setAvulsoVencimento] = useState(todayIsoDate());
-  const [avulsoFormaPagamentoId, setAvulsoFormaPagamentoId] = useState('');
+  const [avulsoMesCompetencia, setAvulsoMesCompetencia] = useState(todayIsoDate().substring(0, 7));
   const [avulsoPessoaId, setAvulsoPessoaId] = useState('');
   const [avulsoPlanoContaId, setAvulsoPlanoContaId] = useState('');
-  const [avulsoMesCompetencia, setAvulsoMesCompetencia] = useState(todayIsoDate().substring(0, 7));
+  const [avulsoFormaPagamentoId, setAvulsoFormaPagamentoId] = useState('');
+  const [avulsoSubmitted, setAvulsoSubmitted] = useState(false);
+  const [avulsoContaBancariaId, setAvulsoContaBancariaId] = useState('');
+  const [confirmarSaldoInsuficiente, setConfirmarSaldoInsuficiente] = useState(false);
+  const [confirmarBaixaSaldoInsuficiente, setConfirmarBaixaSaldoInsuficiente] = useState(false);
+
+  // CRUD (GRUD) states
+  const [contaParaVisualizar, setContaParaVisualizar] = useState<ContaFinanceiraItem | null>(null);
+  const [contaParaEditar, setContaParaEditar] = useState<ContaFinanceiraItem | null>(null);
+  const [editDescricao, setEditDescricao] = useState('');
+  const [editValorCentavos, setEditValorCentavos] = useState(0);
+  const [editVencimento, setEditVencimento] = useState(todayIsoDate());
+  const [editMesCompetencia, setEditMesCompetencia] = useState(todayIsoDate().substring(0, 7));
+  const [editPlanoContaId, setEditPlanoContaId] = useState('');
+  const [editPessoaId, setEditPessoaId] = useState('');
+  const [editFormaPagamentoId, setEditFormaPagamentoId] = useState('');
+  const [editSubmitted, setEditSubmitted] = useState(false);
+  const [editConfirmarSaldo, setEditConfirmarSaldo] = useState(false);
+  const [contaParaExcluir, setContaParaExcluir] = useState<ContaFinanceiraItem | null>(null);
 
   // Modal para editar/vincular plano de contas em conta existente
   const [contaParaVincularPlano, setContaParaVincularPlano] = useState<ContaFinanceiraItem | null>(null);
@@ -77,17 +100,38 @@ export const FinanceiroView: React.FC = () => {
     carregarDados();
   }, []);
 
+  // Saldo total disponível em todas as contas (exibido na tela financeira)
+  const saldoTotalDisponivel =
+    contasBancarias.reduce((acc, b) => acc + b.saldoInicialCentavos, 0) +
+    contas.reduce((acc, c) => {
+      if (c.status === 'pago') {
+        return acc + (c.tipo === 'receber' ? c.valorCentavos : -c.valorCentavos);
+      }
+      return acc;
+    }, 0);
+
+  const getSaldoConta = (contaId?: string) => {
+    if (!contaId) return saldoTotalDisponivel;
+    const conta = contasBancarias.find((b) => b.id === contaId);
+    if (!conta) return 0;
+    let saldo = conta.saldoInicialCentavos;
+    contas.forEach((c) => {
+      if (c.status === 'pago' && c.contaId === contaId) {
+        saldo += c.tipo === 'receber' ? c.valorCentavos : -c.valorCentavos;
+      }
+    });
+    return saldo;
+  };
+
   // Sugestão inteligente: ao selecionar pessoa, buscar o plano mais usado no histórico
   const handleSelecionarPessoaAvulso = (pessoaId: string) => {
     setAvulsoPessoaId(pessoaId);
     if (!pessoaId) return;
 
-    // Buscar lançamentos anteriores desta pessoa que tenham planoContaId
     const historico = contas.filter(
       (c) => c.pessoaId === pessoaId && c.planoContaId && !c.excluido
     );
     if (historico.length > 0) {
-      // Pega o plano de contas mais recente ou mais frequente
       const contagem: Record<string, number> = {};
       historico.forEach((h) => {
         if (h.planoContaId) {
@@ -105,12 +149,21 @@ export const FinanceiroView: React.FC = () => {
     setContaParaBaixar(conta);
     setBaixaContaBancariaId(contasBancarias[0]?.id || 'cb-caixa');
     setBaixaData(todayIsoDate());
+    setConfirmarBaixaSaldoInsuficiente(false);
     setIsBaixaModalOpen(true);
   };
 
   const handleConfirmarBaixa = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!contaParaBaixar) return;
+
+    const saldoContaBaixa = getSaldoConta(baixaContaBancariaId);
+    const isBaixaSaldoInsuficiente =
+      contaParaBaixar.tipo === 'pagar' && contaParaBaixar.valorCentavos > saldoContaBaixa;
+
+    if (isBaixaSaldoInsuficiente && !confirmarBaixaSaldoInsuficiente) {
+      return;
+    }
 
     try {
       await baixarContaFinanceira(
@@ -125,15 +178,80 @@ export const FinanceiroView: React.FC = () => {
     }
   };
 
-  const handleSalvarAvulso = async (e: React.FormEvent) => {
+  const handleEstornarBaixa = async (conta: ContaFinanceiraItem) => {
+    await db.contasFinanceiras.update(conta.id, {
+      status: 'pendente',
+      dataPagamento: undefined,
+      contaId: undefined,
+      dataAlteracao: new Date().toISOString(),
+    });
+    await carregarDados();
+  };
+
+  const abrirEdicaoConta = (c: ContaFinanceiraItem) => {
+    setContaParaEditar(c);
+    setEditDescricao(c.descricao);
+    setEditValorCentavos(c.valorCentavos);
+    setEditVencimento(c.dataVencimento);
+    setEditMesCompetencia(c.mesCompetencia || c.dataVencimento.substring(0, 7));
+    setEditPlanoContaId(c.planoContaId || '');
+    setEditPessoaId(c.pessoaId || '');
+    setEditFormaPagamentoId(c.formaPagamentoId || '');
+    setEditSubmitted(false);
+    setEditConfirmarSaldo(false);
+  };
+
+  const handleSalvarEdicao = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!avulsoDescricao || avulsoValorCentavos <= 0) {
-      alert('Informe descrição e valor válido.');
+    setEditSubmitted(true);
+    if (!contaParaEditar) return;
+    if (!editDescricao.trim() || editValorCentavos <= 0 || !editPlanoContaId) return;
+
+    const isSaldoInsuficiente =
+      contaParaEditar.tipo === 'pagar' && editValorCentavos > saldoTotalDisponivel;
+    if (isSaldoInsuficiente && !editConfirmarSaldo) {
       return;
     }
 
-    if (!avulsoPlanoContaId) {
-      alert('Selecione uma conta do Plano de Contas para correta apuração no DRE.');
+    await db.contasFinanceiras.update(contaParaEditar.id, {
+      descricao: editDescricao.trim(),
+      valorCentavos: editValorCentavos,
+      dataVencimento: editVencimento,
+      mesCompetencia: editMesCompetencia,
+      planoContaId: editPlanoContaId,
+      pessoaId: editPessoaId || undefined,
+      formaPagamentoId: editFormaPagamentoId || undefined,
+      dataAlteracao: new Date().toISOString(),
+    });
+
+    setContaParaEditar(null);
+    await carregarDados();
+  };
+
+  const handleExcluirConta = async () => {
+    if (!contaParaExcluir) return;
+    await db.contasFinanceiras.update(contaParaExcluir.id, {
+      excluido: true,
+      dataAlteracao: new Date().toISOString(),
+    });
+    setContaParaExcluir(null);
+    await carregarDados();
+  };
+
+  const handleSalvarAvulso = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAvulsoSubmitted(true);
+
+    if (!avulsoDescricao.trim() || avulsoValorCentavos <= 0 || !avulsoPlanoContaId) {
+      return;
+    }
+
+    const saldoReferencia = avulsoContaBancariaId
+      ? getSaldoConta(avulsoContaBancariaId)
+      : saldoTotalDisponivel;
+    const isSaldoInsuficiente = avulsoTipo === 'pagar' && avulsoValorCentavos > saldoReferencia;
+
+    if (isSaldoInsuficiente && !confirmarSaldoInsuficiente) {
       return;
     }
 
@@ -143,7 +261,7 @@ export const FinanceiroView: React.FC = () => {
     await db.contasFinanceiras.add({
       id,
       tipo: avulsoTipo,
-      descricao: avulsoDescricao,
+      descricao: avulsoDescricao.trim(),
       referenciaTipo: 'avulso',
       parcelaNumero: 1,
       totalParcelas: 1,
@@ -164,6 +282,9 @@ export const FinanceiroView: React.FC = () => {
     setAvulsoValorCentavos(0);
     setAvulsoPessoaId('');
     setAvulsoPlanoContaId('');
+    setAvulsoContaBancariaId('');
+    setConfirmarSaldoInsuficiente(false);
+    setAvulsoSubmitted(false);
     await carregarDados();
   };
 
@@ -337,37 +458,64 @@ export const FinanceiroView: React.FC = () => {
 
       {/* Overview Cards (when in Receber or Pagar) */}
       {activeTab !== 'fluxo' && activeTab !== 'dre' && activeTab !== 'plano' && (
-        <div className="grid grid-cols-3 gap-2">
-          {/* Vencidas (Vermelho) */}
-          <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 p-2.5 rounded-xl">
-            <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 uppercase block">
-              Vencidas
-            </span>
-            <div className="text-sm font-black text-rose-700 dark:text-rose-300 mt-0.5">
-              {formatCurrency(totalVencido)}
+        <>
+          {/* Banner Saldo Disponível em Caixa / Bancos */}
+          <div className="bg-gradient-to-r from-sky-50 to-blue-50 dark:from-sky-950/40 dark:to-blue-950/30 border border-sky-200 dark:border-sky-800/60 p-3.5 rounded-2xl flex items-center justify-between shadow-xs">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-sky-500/10 dark:bg-sky-500/20 text-sky-600 dark:text-sky-400 rounded-xl">
+                <Building className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold tracking-wider text-sky-700 dark:text-sky-300 block">
+                  Saldo Disponível em Caixa / Bancos
+                </span>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Base consolidada para conferência e validação de despesas
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-base font-black text-sky-700 dark:text-sky-300">
+                {formatCurrency(saldoTotalDisponivel)}
+              </div>
+              <span className="text-[10px] font-semibold text-sky-600/80 dark:text-sky-400/80">
+                {contasBancarias.length} conta(s) ativas
+              </span>
             </div>
           </div>
 
-          {/* Vence em 7 dias (Amarelo) */}
-          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 p-2.5 rounded-xl">
-            <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase block">
-              Em até 7 dias
-            </span>
-            <div className="text-sm font-black text-amber-700 dark:text-amber-300 mt-0.5">
-              {formatCurrency(totalVence7Dias)}
+          <div className="grid grid-cols-3 gap-2">
+            {/* Vencidas (Vermelho) */}
+            <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 p-2.5 rounded-xl">
+              <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 uppercase block">
+                Vencidas
+              </span>
+              <div className="text-sm font-black text-rose-700 dark:text-rose-300 mt-0.5">
+                {formatCurrency(totalVencido)}
+              </div>
             </div>
-          </div>
 
-          {/* Total Pendente */}
-          <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-2.5 rounded-xl">
-            <span className="text-[10px] font-bold text-slate-500 uppercase block">
-              Total Aberto
-            </span>
-            <div className="text-sm font-black text-slate-800 dark:text-slate-100 mt-0.5">
-              {formatCurrency(totalGeral)}
+            {/* Vence em 7 dias (Amarelo) */}
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 p-2.5 rounded-xl">
+              <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase block">
+                Em até 7 dias
+              </span>
+              <div className="text-sm font-black text-amber-700 dark:text-amber-300 mt-0.5">
+                {formatCurrency(totalVence7Dias)}
+              </div>
+            </div>
+
+            {/* Total Pendente */}
+            <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-2.5 rounded-xl">
+              <span className="text-[10px] font-bold text-slate-500 uppercase block">
+                Total Aberto
+              </span>
+              <div className="text-sm font-black text-slate-800 dark:text-slate-100 mt-0.5">
+                {formatCurrency(totalGeral)}
+              </div>
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Tab: A Receber & A Pagar list */}
@@ -478,22 +626,63 @@ export const FinanceiroView: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Baixa button if pending */}
-                  {!isPago && (
-                    <div className="flex justify-end pt-2 mt-2 border-t border-slate-100 dark:border-slate-800">
+                  {/* CRUD Actions Bar */}
+                  <div className="flex items-center justify-between pt-2.5 mt-2.5 border-t border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center gap-1">
                       <button
-                        onClick={() => abrirBaixa(c)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white transition shadow-xs ${
-                          c.tipo === 'receber'
-                            ? 'bg-emerald-600 hover:bg-emerald-500'
-                            : 'bg-rose-600 hover:bg-rose-500'
-                        }`}
+                        type="button"
+                        onClick={() => setContaParaVisualizar(c)}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-950/30 rounded-lg transition"
+                        title="Visualizar detalhes completos"
                       >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>{c.tipo === 'receber' ? 'Receber Valor' : 'Pagar Título'}</span>
+                        <Eye className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Ver</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => abrirEdicaoConta(c)}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-lg transition"
+                        title="Editar lançamento"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Editar</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setContaParaExcluir(c)}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition"
+                        title="Excluir lançamento"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Excluir</span>
                       </button>
                     </div>
-                  )}
+
+                    <div>
+                      {!isPago ? (
+                        <button
+                          onClick={() => abrirBaixa(c)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white transition shadow-xs ${
+                            c.tipo === 'receber'
+                              ? 'bg-emerald-600 hover:bg-emerald-500'
+                              : 'bg-rose-600 hover:bg-rose-500'
+                          }`}
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>{c.tipo === 'receber' ? 'Receber Valor' : 'Pagar Título'}</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleEstornarBaixa(c)}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition"
+                          title="Estornar baixa para status pendente"
+                        >
+                          <RotateCcw className="w-3 h-3 text-slate-400" />
+                          <span>Estornar</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               );
             })
@@ -630,17 +819,56 @@ export const FinanceiroView: React.FC = () => {
                 </label>
                 <select
                   value={baixaContaBancariaId}
-                  onChange={(e) => setBaixaContaBancariaId(e.target.value)}
+                  onChange={(e) => {
+                    setBaixaContaBancariaId(e.target.value);
+                    setConfirmarBaixaSaldoInsuficiente(false);
+                  }}
                   required
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white"
                 >
                   {contasBancarias.map((b) => (
                     <option key={b.id} value={b.id}>
-                      {b.nome}
+                      {b.nome} (Saldo atual: {formatCurrency(getSaldoConta(b.id))})
                     </option>
                   ))}
                 </select>
               </div>
+
+              {/* Cross-field validation: Alerta de Saldo Insuficiente na Baixa */}
+              {contaParaBaixar.tipo === 'pagar' &&
+                contaParaBaixar.valorCentavos > getSaldoConta(baixaContaBancariaId) && (
+                  <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 p-3 rounded-xl space-y-2 animate-in fade-in duration-200">
+                    <div className="flex items-start gap-2 text-amber-800 dark:text-amber-200 text-xs">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold block">Alerta: Saldo Insuficiente na Conta</span>
+                        <span>
+                          O saldo disponível nesta conta é de{' '}
+                          <strong>{formatCurrency(getSaldoConta(baixaContaBancariaId))}</strong>, inferior ao
+                          valor do pagamento ({formatCurrency(contaParaBaixar.valorCentavos)}). A conta ficará
+                          negativa em{' '}
+                          <strong>
+                            {formatCurrency(
+                              contaParaBaixar.valorCentavos - getSaldoConta(baixaContaBancariaId)
+                            )}
+                          </strong>
+                          .
+                        </span>
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 pt-1 border-t border-amber-200 dark:border-amber-800/40 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={confirmarBaixaSaldoInsuficiente}
+                        onChange={(e) => setConfirmarBaixaSaldoInsuficiente(e.target.checked)}
+                        className="rounded border-amber-400 text-amber-600 focus:ring-amber-500 w-4 h-4"
+                      />
+                      <span className="text-[11px] font-semibold text-amber-900 dark:text-amber-100">
+                        Confirmar pagamento mesmo com saldo insuficiente
+                      </span>
+                    </label>
+                  </div>
+                )}
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
@@ -657,7 +885,12 @@ export const FinanceiroView: React.FC = () => {
 
               <button
                 type="submit"
-                className={`w-full py-3 text-white font-bold text-xs rounded-xl shadow-md transition ${
+                disabled={
+                  contaParaBaixar.tipo === 'pagar' &&
+                  contaParaBaixar.valorCentavos > getSaldoConta(baixaContaBancariaId) &&
+                  !confirmarBaixaSaldoInsuficiente
+                }
+                className={`w-full py-3 text-white font-bold text-xs rounded-xl shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed ${
                   contaParaBaixar.tipo === 'receber'
                     ? 'bg-emerald-600 hover:bg-emerald-500'
                     : 'bg-rose-600 hover:bg-rose-500'
@@ -757,7 +990,11 @@ export const FinanceiroView: React.FC = () => {
                   required
                   value={avulsoPlanoContaId}
                   onChange={(e) => setAvulsoPlanoContaId(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white font-medium"
+                  className={`w-full bg-slate-50 dark:bg-slate-800 border rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white font-medium transition ${
+                    avulsoSubmitted && !avulsoPlanoContaId
+                      ? 'border-rose-500 bg-rose-50/30 dark:bg-rose-950/20 focus:ring-2 focus:ring-rose-500/20'
+                      : 'border-slate-200 dark:border-slate-700'
+                  }`}
                 >
                   <option value="" disabled>
                     Selecione a conta contábil...
@@ -779,6 +1016,12 @@ export const FinanceiroView: React.FC = () => {
                       </option>
                     ))}
                 </select>
+                {avulsoSubmitted && !avulsoPlanoContaId && (
+                  <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 mt-1 flex items-center gap-1.5 animate-in fade-in duration-150">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                    <span>Selecione uma conta do Plano de Contas.</span>
+                  </p>
+                )}
               </div>
 
               <div>
@@ -791,8 +1034,40 @@ export const FinanceiroView: React.FC = () => {
                   placeholder="Ex: Aluguel do Galpão, Conta de Energia, Taxa de Máquina..."
                   value={avulsoDescricao}
                   onChange={(e) => setAvulsoDescricao(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white"
+                  className={`w-full bg-slate-50 dark:bg-slate-800 border rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white transition ${
+                    avulsoSubmitted && !avulsoDescricao.trim()
+                      ? 'border-rose-500 bg-rose-50/30 dark:bg-rose-950/20 focus:ring-2 focus:ring-rose-500/20'
+                      : 'border-slate-200 dark:border-slate-700'
+                  }`}
                 />
+                {avulsoSubmitted && !avulsoDescricao.trim() && (
+                  <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 mt-1 flex items-center gap-1.5 animate-in fade-in duration-150">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                    <span>Informe a descrição do lançamento.</span>
+                  </p>
+                )}
+              </div>
+
+              {/* Conta Bancária / Origem para conferência */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Conta de Origem / Referência de Saldo
+                </label>
+                <select
+                  value={avulsoContaBancariaId}
+                  onChange={(e) => {
+                    setAvulsoContaBancariaId(e.target.value);
+                    setConfirmarSaldoInsuficiente(false);
+                  }}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white"
+                >
+                  <option value="">Saldo Geral Consolidado ({formatCurrency(saldoTotalDisponivel)})</option>
+                  {contasBancarias.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.nome} (Saldo atual: {formatCurrency(getSaldoConta(b.id))})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -801,11 +1076,69 @@ export const FinanceiroView: React.FC = () => {
                 </label>
                 <MoneyInput
                   valueCentavos={avulsoValorCentavos}
-                  onChange={(val) => setAvulsoValorCentavos(val)}
+                  onChange={(val) => {
+                    setAvulsoValorCentavos(val);
+                    setConfirmarSaldoInsuficiente(false);
+                  }}
                   required
+                  error={avulsoSubmitted && avulsoValorCentavos <= 0 ? 'Informe um valor maior que zero.' : null}
+                  warning={
+                    avulsoTipo === 'pagar' &&
+                    avulsoValorCentavos >
+                      (avulsoContaBancariaId ? getSaldoConta(avulsoContaBancariaId) : saldoTotalDisponivel)
+                      ? 'Saldo Insuficiente: o valor da despesa excede o saldo em conta.'
+                      : null
+                  }
                   className="w-full"
                 />
               </div>
+
+              {/* Cross-field validation: Alerta de Saldo Insuficiente em Lançamento Avulso */}
+              {avulsoTipo === 'pagar' &&
+                avulsoValorCentavos >
+                  (avulsoContaBancariaId ? getSaldoConta(avulsoContaBancariaId) : saldoTotalDisponivel) && (
+                  <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 p-3 rounded-xl space-y-2 animate-in fade-in duration-200">
+                    <div className="flex items-start gap-2 text-amber-800 dark:text-amber-200 text-xs">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold block">Alerta: Saldo Insuficiente</span>
+                        <span>
+                          O valor desta despesa ({formatCurrency(avulsoValorCentavos)}) excede o saldo disponível{' '}
+                          (
+                          {formatCurrency(
+                            avulsoContaBancariaId ? getSaldoConta(avulsoContaBancariaId) : saldoTotalDisponivel
+                          )}
+                          ). Déficit previsto de{' '}
+                          <strong>
+                            {formatCurrency(
+                              avulsoValorCentavos -
+                                (avulsoContaBancariaId
+                                  ? getSaldoConta(avulsoContaBancariaId)
+                                  : saldoTotalDisponivel)
+                            )}
+                          </strong>
+                          .
+                        </span>
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 pt-1 border-t border-amber-200 dark:border-amber-800/40 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={confirmarSaldoInsuficiente}
+                        onChange={(e) => setConfirmarSaldoInsuficiente(e.target.checked)}
+                        className="rounded border-amber-400 text-amber-600 focus:ring-amber-500 w-4 h-4"
+                      />
+                      <span className="text-[11px] font-semibold text-amber-900 dark:text-amber-100">
+                        Confirmar despesa mesmo com saldo insuficiente
+                      </span>
+                    </label>
+                    {avulsoSubmitted && !confirmarSaldoInsuficiente && (
+                      <p className="text-[10px] font-bold text-rose-600 dark:text-rose-400">
+                        Marque a confirmação acima para permitir o salvamento desta despesa.
+                      </p>
+                    )}
+                  </div>
+                )}
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -898,6 +1231,429 @@ export const FinanceiroView: React.FC = () => {
                   className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-xs font-semibold rounded-xl text-slate-700 dark:text-slate-300"
                 >
                   Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CRUD: Visualizar Detalhes (Read) */}
+      {contaParaVisualizar && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4">
+          <div className="w-full sm:max-w-lg bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-5 animate-in slide-in-from-bottom-6">
+            <div className="flex justify-between items-start pb-3 border-b border-slate-100 dark:border-slate-800 mb-4">
+              <div>
+                <span
+                  className={`inline-block text-[10px] uppercase font-bold px-2 py-0.5 rounded-full mb-1 ${
+                    contaParaVisualizar.tipo === 'receber'
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400'
+                      : 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400'
+                  }`}
+                >
+                  {contaParaVisualizar.tipo === 'receber' ? 'Conta a Receber' : 'Conta a Pagar'}
+                </span>
+                <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                  {contaParaVisualizar.descricao}
+                </h3>
+              </div>
+              <button
+                onClick={() => setContaParaVisualizar(null)}
+                className="p-1 rounded-full text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Valor e Status */}
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60">
+                <div>
+                  <span className="text-[10px] text-slate-500 uppercase font-semibold block">Valor</span>
+                  <span
+                    className={`text-xl font-black ${
+                      contaParaVisualizar.tipo === 'receber'
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-rose-600 dark:text-rose-400'
+                    }`}
+                  >
+                    {formatCurrency(contaParaVisualizar.valorCentavos)}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-slate-500 uppercase font-semibold block">Situação</span>
+                  <span
+                    className={`inline-block text-xs font-bold px-2.5 py-1 rounded-lg ${
+                      contaParaVisualizar.status === 'pago'
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
+                        : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                    }`}
+                  >
+                    {contaParaVisualizar.status === 'pago' ? 'Pago / Baixado' : 'Pendente em Aberto'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Informações detalhadas em grade */}
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-400 text-[10px] uppercase font-bold block">Vencimento</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                    {formatDateBr(contaParaVisualizar.dataVencimento)}
+                  </span>
+                </div>
+
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-400 text-[10px] uppercase font-bold block">Competência</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                    {contaParaVisualizar.mesCompetencia || 'Não informada'}
+                  </span>
+                </div>
+
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-400 text-[10px] uppercase font-bold block">Plano de Contas</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                    {(() => {
+                      const pl = planoContas.find((p) => p.id === contaParaVisualizar.planoContaId);
+                      return pl ? `${pl.codigo} - ${pl.nome}` : 'Sem vínculo contábil';
+                    })()}
+                  </span>
+                </div>
+
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-400 text-[10px] uppercase font-bold block">
+                    {contaParaVisualizar.tipo === 'receber' ? 'Cliente' : 'Favorecido'}
+                  </span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                    {(() => {
+                      const pes = pessoas.find((p) => p.id === contaParaVisualizar.pessoaId);
+                      return pes ? pes.nome : 'Não informado';
+                    })()}
+                  </span>
+                </div>
+
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-400 text-[10px] uppercase font-bold block">Forma de Pagamento</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                    {(() => {
+                      const fp = formasPagamento.find((f) => f.id === contaParaVisualizar.formaPagamentoId);
+                      return fp ? fp.nome : 'Padrão';
+                    })()}
+                  </span>
+                </div>
+
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-400 text-[10px] uppercase font-bold block">Parcela</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                    {contaParaVisualizar.parcelaNumero} de {contaParaVisualizar.totalParcelas}
+                  </span>
+                </div>
+
+                {contaParaVisualizar.status === 'pago' && (
+                  <>
+                    <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-xl border border-emerald-100 dark:border-emerald-900/40">
+                      <span className="text-emerald-700 dark:text-emerald-400 text-[10px] uppercase font-bold block">
+                        Data da Baixa
+                      </span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">
+                        {contaParaVisualizar.dataPagamento
+                          ? formatDateBr(contaParaVisualizar.dataPagamento)
+                          : 'Confirmado'}
+                      </span>
+                    </div>
+
+                    <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-xl border border-emerald-100 dark:border-emerald-900/40">
+                      <span className="text-emerald-700 dark:text-emerald-400 text-[10px] uppercase font-bold block">
+                        Conta Utilizada
+                      </span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">
+                        {(() => {
+                          const cb = contasBancarias.find((b) => b.id === contaParaVisualizar.contaId);
+                          return cb ? cb.nome : 'Conta padrão';
+                        })()}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Botões de Ação do Detalhes */}
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const item = contaParaVisualizar;
+                      setContaParaVisualizar(null);
+                      abrirEdicaoConta(item);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 rounded-xl transition"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    <span>Editar</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const item = contaParaVisualizar;
+                      setContaParaVisualizar(null);
+                      setContaParaExcluir(item);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 rounded-xl transition"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Excluir</span>
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setContaParaVisualizar(null)}
+                  className="px-4 py-2 text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded-xl transition"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CRUD: Editar Conta (Update) */}
+      {contaParaEditar && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4">
+          <div className="w-full sm:max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-5 animate-in slide-in-from-bottom-6">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                  Editar Título Financeiro
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  {contaParaEditar.tipo === 'receber' ? 'Conta a Receber' : 'Conta a Pagar'}
+                </p>
+              </div>
+              <button
+                onClick={() => setContaParaEditar(null)}
+                className="p-1 rounded-full text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSalvarEdicao} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Descrição do Lançamento *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editDescricao}
+                  onChange={(e) => setEditDescricao(e.target.value)}
+                  className={`w-full bg-slate-50 dark:bg-slate-800 border rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white transition ${
+                    editSubmitted && !editDescricao.trim()
+                      ? 'border-rose-500 bg-rose-50/30'
+                      : 'border-slate-200 dark:border-slate-700'
+                  }`}
+                />
+                {editSubmitted && !editDescricao.trim() && (
+                  <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 mt-1 flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                    <span>Informe a descrição do lançamento.</span>
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Plano de Contas *
+                </label>
+                <select
+                  required
+                  value={editPlanoContaId}
+                  onChange={(e) => setEditPlanoContaId(e.target.value)}
+                  className={`w-full bg-slate-50 dark:bg-slate-800 border rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white transition ${
+                    editSubmitted && !editPlanoContaId
+                      ? 'border-rose-500 bg-rose-50/30'
+                      : 'border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  <option value="" disabled>
+                    Selecione a conta contábil...
+                  </option>
+                  {planoContas.map((pc) => (
+                    <option key={pc.id} value={pc.id}>
+                      {pc.codigo} - {pc.nome} ({pc.tipo === 'receita' ? 'Receita' : 'Despesa'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  {contaParaEditar.tipo === 'receber' ? 'Cliente' : 'Fornecedor / Favorecido'}
+                </label>
+                <select
+                  value={editPessoaId}
+                  onChange={(e) => setEditPessoaId(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white"
+                >
+                  <option value="">Não informado</option>
+                  {pessoas.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Valor *
+                </label>
+                <MoneyInput
+                  valueCentavos={editValorCentavos}
+                  onChange={(val) => {
+                    setEditValorCentavos(val);
+                    setEditConfirmarSaldo(false);
+                  }}
+                  required
+                  error={editSubmitted && editValorCentavos <= 0 ? 'Informe um valor maior que zero.' : null}
+                  warning={
+                    contaParaEditar.tipo === 'pagar' && editValorCentavos > saldoTotalDisponivel
+                      ? 'Saldo Insuficiente: o valor da despesa excede o saldo disponível.'
+                      : null
+                  }
+                  className="w-full"
+                />
+              </div>
+
+              {/* Cross-field validation: Alerta de Saldo Insuficiente na Edição */}
+              {contaParaEditar.tipo === 'pagar' && editValorCentavos > saldoTotalDisponivel && (
+                <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 p-3 rounded-xl space-y-2 animate-in fade-in duration-200">
+                  <div className="flex items-start gap-2 text-amber-800 dark:text-amber-200 text-xs">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold block">Alerta: Saldo Insuficiente</span>
+                      <span>
+                        O valor ajustado ({formatCurrency(editValorCentavos)}) é superior ao saldo disponível em
+                        caixa ({formatCurrency(saldoTotalDisponivel)}).
+                      </span>
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 pt-1 border-t border-amber-200 dark:border-amber-800/40 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editConfirmarSaldo}
+                      onChange={(e) => setEditConfirmarSaldo(e.target.checked)}
+                      className="rounded border-amber-400 text-amber-600 focus:ring-amber-500 w-4 h-4"
+                    />
+                    <span className="text-[11px] font-semibold text-amber-900 dark:text-amber-100">
+                      Confirmar valor de despesa acima do saldo disponível
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Vencimento *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={editVencimento}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setEditVencimento(v);
+                      if (v) setEditMesCompetencia(v.substring(0, 7));
+                    }}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Mês Competência *
+                  </label>
+                  <input
+                    type="month"
+                    required
+                    value={editMesCompetencia}
+                    onChange={(e) => setEditMesCompetencia(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setContaParaEditar(null)}
+                  className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-xl transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl shadow-md transition"
+                >
+                  Salvar Alterações
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CRUD: Excluir Conta (Delete) */}
+      {contaParaExcluir && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4">
+          <div className="w-full sm:max-w-md bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-5 animate-in slide-in-from-bottom-6">
+            <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800 mb-4">
+              <div className="p-2.5 bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 rounded-xl">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                  Excluir Título Financeiro
+                </h3>
+                <p className="text-[11px] text-slate-500">Confirmação de exclusão do registro</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-xs text-slate-600 dark:text-slate-300">
+                Tem certeza de que deseja excluir o lançamento{' '}
+                <strong className="text-slate-900 dark:text-white">
+                  "{contaParaExcluir.descricao}"
+                </strong>{' '}
+                no valor de{' '}
+                <strong className="text-slate-900 dark:text-white">
+                  {formatCurrency(contaParaExcluir.valorCentavos)}
+                </strong>
+                ?
+              </p>
+
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-xl text-[11px] text-amber-800 dark:text-amber-300">
+                O registro será cancelado do fluxo de caixa e não constará mais nos demonstrativos e DRE.
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setContaParaExcluir(null)}
+                  className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-xl transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExcluirConta}
+                  className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-md transition"
+                >
+                  Sim, Excluir Título
                 </button>
               </div>
             </div>

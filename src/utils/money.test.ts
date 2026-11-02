@@ -34,4 +34,6 @@ test('sanitizeMoneyInputText keeps valid digits, comma and max 2 decimal places'
   assert.equal(sanitizeMoneyInputText('12,500'), '12,50');
   assert.equal(sanitizeMoneyInputText('abc12,99xyz'), '12,99');
   assert.equal(sanitizeMoneyInputText('12,34,56'), '12,34');
+  assert.equal(sanitizeMoneyInputText('-12,50', false, true), '-12,50');
+  assert.equal(sanitizeMoneyInputText('-5', false, true), '-5');
 });

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Minus, Plus } from 'lucide-react';
+import { Minus, Plus, AlertCircle, AlertTriangle } from 'lucide-react';
 import { stepQuantity, parseQuantityInput, StepOptions } from '../../utils/stepper';
 
 export interface QuantityInputProps extends StepOptions {
@@ -8,11 +8,16 @@ export interface QuantityInputProps extends StepOptions {
   unit?: string;
   size?: 'sm' | 'md' | 'lg';
   disabled?: boolean;
+  required?: boolean;
   className?: string;
   label?: string;
   placeholder?: string;
   quickAddButtons?: number[];
   autoFocusOnMount?: boolean;
+  error?: string | null;
+  warning?: string | null;
+  helperText?: string;
+  validate?: (val: number) => string | null | undefined;
 }
 
 export const QuantityInput: React.FC<QuantityInputProps> = ({
@@ -25,14 +30,20 @@ export const QuantityInput: React.FC<QuantityInputProps> = ({
   unit,
   size = 'md',
   disabled = false,
+  required = false,
   className = '',
   label,
   placeholder,
   quickAddButtons,
   autoFocusOnMount = false,
+  error,
+  warning,
+  helperText,
+  validate,
 }) => {
   // Local string representation so user can type freely without aggressive formatting interrupting keystrokes
   const [textValue, setTextValue] = useState<string>(() => (value !== undefined && !isNaN(value) ? String(value) : '0'));
+  const [isTouched, setIsTouched] = useState(false);
 
   // Sync with prop when prop changes from outside
   useEffect(() => {
@@ -46,6 +57,7 @@ export const QuantityInput: React.FC<QuantityInputProps> = ({
 
   const handleStep = (direction: 'inc' | 'dec') => {
     if (disabled) return;
+    setIsTouched(true);
     const currentNum = parseQuantityInput(textValue, value, { min, max, step, decimals });
     const nextNum = stepQuantity(currentNum, direction, { min, max, step, decimals });
     setTextValue(String(nextNum));
@@ -54,6 +66,7 @@ export const QuantityInput: React.FC<QuantityInputProps> = ({
 
   const handleQuickAdd = (delta: number) => {
     if (disabled) return;
+    setIsTouched(true);
     const currentNum = parseQuantityInput(textValue, value, { min, max, step, decimals });
     let nextNum = currentNum + delta;
     if (min !== undefined && nextNum < min) nextNum = min;
@@ -66,20 +79,35 @@ export const QuantityInput: React.FC<QuantityInputProps> = ({
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setIsTouched(true);
     const raw = e.target.value;
     setTextValue(raw);
+
+    // Se estiver digitando negativo e min >= 0, não deixa corromper o estado pai com negativo
+    if (raw.trim().startsWith('-') && (min === undefined || min >= 0)) {
+      onChange(0);
+      return;
+    }
+
     const parsed = parseQuantityInput(raw, value, { min, max, step, decimals });
     onChange(parsed);
   };
 
   const handleBlur = () => {
+    setIsTouched(true);
     // On blur, normalize representation
+    if (textValue.trim().startsWith('-') && (min === undefined || min >= 0)) {
+      setTextValue(String(min ?? 0));
+      onChange(min ?? 0);
+      return;
+    }
     const parsed = parseQuantityInput(textValue, min ?? 0, { min, max, step, decimals });
     setTextValue(String(parsed));
     onChange(parsed);
   };
 
   const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    setIsTouched(true);
     // Highlight and select all text immediately on focus so typing instantly replaces the number
     e.currentTarget.select();
   };
@@ -90,6 +118,29 @@ export const QuantityInput: React.FC<QuantityInputProps> = ({
       e.currentTarget.select();
     }
   };
+
+  // Avaliação de erros inline
+  let computedError: string | null = error || null;
+
+  if (!computedError) {
+    const isNegative = textValue.trim().startsWith('-') || value < 0;
+    if (isNegative && (min === undefined || min >= 0)) {
+      computedError = 'A quantidade não pode ser negativa.';
+    } else if (textValue.trim() && isNaN(Number(textValue.replace(',', '.')))) {
+      computedError = 'Valor numérico inválido.';
+    } else if (isTouched && required && value <= 0) {
+      computedError = 'Informe uma quantidade maior que zero.';
+    } else if (min !== undefined && min > 0 && value < min && isTouched) {
+      computedError = `Quantidade mínima é ${min}${unit ? ` ${unit}` : ''}.`;
+    } else if (max !== undefined && max !== Infinity && value > max) {
+      computedError = `Quantidade máxima é ${max}${unit ? ` ${unit}` : ''}.`;
+    } else if (validate) {
+      computedError = validate(value) || null;
+    }
+  }
+
+  const hasError = Boolean(computedError);
+  const hasWarning = !hasError && Boolean(warning);
 
   // Size variations
   const isSm = size === 'sm';
@@ -111,16 +162,27 @@ export const QuantityInput: React.FC<QuantityInputProps> = ({
   const isMinDisabled = disabled || (min !== undefined && value <= min);
   const isMaxDisabled = disabled || (max !== undefined && value >= max);
 
+  const borderStyles = hasError
+    ? 'border-rose-500 dark:border-rose-500 bg-rose-50/30 dark:bg-rose-950/20 focus-within:ring-2 focus-within:ring-rose-500/20 focus-within:border-rose-500'
+    : hasWarning
+    ? 'border-amber-400 dark:border-amber-600 bg-amber-50/20 dark:bg-amber-950/20 focus-within:ring-2 focus-within:ring-amber-500/20 focus-within:border-amber-500'
+    : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 focus-within:ring-2 focus-within:ring-sky-500/20 focus-within:border-sky-500';
+
   return (
     <div className={`flex flex-col min-w-0 ${className}`}>
       {label && (
-        <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+        <label
+          className={`block text-[11px] font-semibold mb-1 ${
+            hasError ? 'text-rose-600 dark:text-rose-400' : 'text-slate-600 dark:text-slate-400'
+          }`}
+        >
           {label}
+          {required && <span className="text-rose-500 ml-0.5">*</span>}
         </label>
       )}
 
       <div
-        className={`flex items-center min-w-0 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl ${containerPadding} shadow-2xs transition-all focus-within:ring-2 focus-within:ring-sky-500/20 focus-within:border-sky-500`}
+        className={`flex items-center min-w-0 rounded-xl border ${containerPadding} shadow-2xs transition-all ${borderStyles}`}
       >
         {/* Decrement Button */}
         <button
@@ -147,10 +209,19 @@ export const QuantityInput: React.FC<QuantityInputProps> = ({
             onMouseUp={handleMouseUp}
             placeholder={placeholder}
             disabled={disabled}
-            className={`w-full bg-transparent text-center font-bold text-slate-900 dark:text-white outline-none tabular-nums ${inputClass}`}
+            aria-invalid={hasError}
+            className={`w-full bg-transparent text-center font-bold tabular-nums outline-none transition-colors ${
+              hasError
+                ? 'text-rose-700 dark:text-rose-300'
+                : 'text-slate-900 dark:text-white'
+            } ${inputClass}`}
           />
           {unit && (
-            <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 pr-1 select-none pointer-events-none">
+            <span
+              className={`text-[10px] font-semibold pr-1 select-none pointer-events-none transition-colors ${
+                hasError ? 'text-rose-400' : 'text-slate-400 dark:text-slate-500'
+              }`}
+            >
               {unit}
             </span>
           )}
@@ -184,6 +255,29 @@ export const QuantityInput: React.FC<QuantityInputProps> = ({
             </button>
           ))}
         </div>
+      )}
+
+      {/* Inline feedback error messages */}
+      {computedError && (
+        <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 mt-1 flex items-center gap-1.5 animate-in fade-in duration-150">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+          <span>{computedError}</span>
+        </p>
+      )}
+
+      {/* Inline warning message */}
+      {!computedError && warning && (
+        <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1.5 animate-in fade-in duration-150">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+          <span>{warning}</span>
+        </p>
+      )}
+
+      {/* Helper text when no error */}
+      {!computedError && !warning && helperText && (
+        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+          {helperText}
+        </p>
       )}
     </div>
   );
